@@ -4,12 +4,7 @@ import Image from "next/image";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { notFound } from "next/navigation";
 
-const pages = {
-  about: "About Loopr",
-  terms: "Terms of Service",
-  privacy: "Privacy Policy",
-  refunds: "Refund Policy",
-} as const;
+import { policySections, policyTitles as pages } from "@/lib/policies";
 
 type Props = { params: Promise<{ policy: string }> };
 
@@ -39,29 +34,24 @@ export default async function PolicyPage({ params }: Props) {
       <nav aria-label="Loopr policies" className="legal-links">
         {Object.entries(pages).map(([slug, label]) => <Link key={slug} href={`/${slug}`} aria-current={slug === key ? "page" : undefined}>{label}</Link>)}
       </nav>
-      <div className="legal-content">
-    {key === "about" && <>
-      <h2>Behind Loopr</h2>
-      <p>Loopr is actively maintained by lordpipon</p>
-      <a className="legal-source" aria-label="Source code on GitHub" href="https://github.com/lordpipon/loopr">
-        Source code on GitHub <ArrowUpRight size={16} />
-      </a>
-    </>}
-    {key === "terms" && <>
-      <h2>Using Loopr</h2><p>You must be at least 13 to create an account. Keep your login details private and use an email address you control.</p>
-      <h2>What you share</h2><p>Share only content you have permission to post. Do not use Loopr to harass others, impersonate someone, distribute unlawful content, or abuse the service.</p>
-      <h2>Feature availability</h2><p>Features and availability can change during development.</p>
-    </>}
-    {key === "privacy" && <>
-      <h2>Account data</h2><p>Loopr stores account details, your public profile, your private date of birth, and session data. Passwords are stored as hashes. Google sends your account identifier and basic profile information if you choose Google sign-in.</p>
-      <h2>Cookies and site storage</h2><p>Loopr uses cookies to keep you signed in and to support Google sign-in. Display settings and the cookie notice preference are stored in your browser.</p>
-      <h2>Push notifications</h2><p>If you enable browser push, Loopr stores the device subscription needed to deliver it. You can disable push in Settings or revoke permission in your browser.</p>
-    </>}
-    {key === "refunds" && <>
-      <h2>Stripe payments</h2><p>Loopr does not currently accept live payments. Stripe test transactions do not charge real money and do not result in refunds.</p>
-      <h2>Before live checkout</h2><p>Loopr will publish the applicable refund terms before accepting real payments.</p>
-    </>}
-      </div>
+      <article className="legal-content">
+        {key === "about" ? <>
+          <h2>Behind Loopr</h2>
+          <p>Loopr is actively maintained by lordpipon</p>
+          <a className="legal-source" aria-label="Source code on GitHub" href="https://github.com/lordpipon/loopr">
+            Source code on GitHub <ArrowUpRight size={16} />
+          </a>
+        </> : <>
+          {policySections[key].map(({ title, body }) => <section className="policy-section" key={title}>
+            <h2>{title}</h2>
+            <p>{body}</p>
+          </section>)}
+          <section className="policy-section">
+            <h2>Contact</h2>
+            <p>Reach the <a href="https://github.com/lordpipon">Loopr maintainer on GitHub</a>. Ask for a private channel before sending personal or account information.</p>
+          </section>
+        </>}
+      </article>
     </div>
   </main>;
 }

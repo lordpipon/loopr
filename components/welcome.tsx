@@ -89,7 +89,7 @@ export function Welcome({ google, mail, configured }: { google: boolean; mail: b
         <h1>Happening now</h1>
         <h2>Join today.</h2>
         <div className="welcome-actions">
-          <Button variant="outline" disabled={!google} onClick={() => void googleSignIn()}><span className="google-mark" aria-hidden>G</span> Sign up with Google</Button>
+          <Button variant="outline" disabled={!google} onClick={() => void googleSignIn()}><Image src="/google.svg" width={18} height={18} alt="" /> Sign up with Google</Button>
           <span className="auth-divider">or</span>
           <Button disabled={!configured || !mail} onClick={() => open("register")}>Create account</Button>
           <p>By creating an account, you agree to the <Link href="/terms">Terms of Service</Link> and acknowledge the <Link href="/privacy">Privacy Policy</Link>.</p>
@@ -99,13 +99,13 @@ export function Welcome({ google, mail, configured }: { google: boolean; mail: b
         </div>
       </div>
     </main>
-    <footer className="welcome-footer"><Link href="/terms">Terms of Service</Link><Link href="/privacy">Privacy Policy</Link><Link href="/refunds">Refund Policy</Link><span>© 2026 Loopr</span></footer>
+    <footer className="welcome-footer"><Link href="/terms">Terms of Service</Link><Link href="/privacy">Privacy Policy</Link><Link href="/refunds">Refund Policy</Link><Link href="/cookies">Cookies</Link><Link href="/guidelines">Community Guidelines</Link><span>© 2026 Loopr</span></footer>
     <Modal className="auth-dialog" headerMark={<Image src="/logo.svg" width={44} height={44} alt="" />} open={screen !== null} onOpenChange={(next) => { if (!next) open(null); }} title={screen === "register" ? "Create your account" : screen === "reset" ? "Reset your password" : "Sign in to Loopr"}>
       <div className="auth-modal-body">
         {screen === "register" && !notice && <p className="auth-progress">Step {step} of 2</p>}
         {notice ? <p className="form-success" role="status">{notice}</p> : <>
-          {screen === "login" && step === 1 && google && <><Button variant="outline" disabled={busy} onClick={() => void googleSignIn()}><span className="google-mark" aria-hidden>G</span> Continue with Google</Button><span className="auth-divider">or</span></>}
-          <form className="auth-form" onSubmit={submit}>
+          {screen === "login" && step === 1 && google && <><Button variant="outline" disabled={busy} onClick={() => void googleSignIn()}><Image src="/google.svg" width={18} height={18} alt="" /> Continue with Google</Button><span className="auth-divider">or</span></>}
+          <form className="auth-form" data-auth-step={step} onSubmit={submit}>
             {screen === "reset" ? <label>Email<input name="email" type="email" autoComplete="email" required /></label>
               : step === 1 ? <>
                 {screen === "register" && <label>Name<input name="name" autoComplete="name" required maxLength={50} value={name} onChange={(e) => setName(e.target.value)} /></label>}

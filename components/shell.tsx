@@ -364,7 +364,7 @@ export function Shell({ viewer, feed, profileSummary }: { viewer: Person; feed: 
         </section>
         {renderFollowPanel()}
         <footer className="footer-links">
-          {[["Terms", "/terms"], ["Privacy", "/privacy"], ["Refunds", "/refunds"], ["About", "/about"]].map(([name, href]) => <LinkTo key={name} href={href}>{name}</LinkTo>)}
+          {[["Terms", "/terms"], ["Privacy", "/privacy"], ["Refunds", "/refunds"], ["Cookies", "/cookies"], ["Guidelines", "/guidelines"], ["About", "/about"]].map(([name, href]) => <LinkTo key={name} href={href}>{name}</LinkTo>)}
           <span>© 2026 Loopr</span>
         </footer>
       </aside>
