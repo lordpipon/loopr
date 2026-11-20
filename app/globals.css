@@ -159,26 +159,19 @@ h1, h2, p { margin: 0; }
 .dialog.drawer { top: 0; bottom: 0; left: 0; width: min(320px, 85vw); max-height: 100dvh; transform: none; border-radius: 0 16px 16px 0; animation: drawer-in 200ms ease; }
 .drawer-content, .account-options { display: grid; justify-items: start; gap: 8px; }
 .drawer-content p { margin: 8px 0; }
-.drawer-content span:not(.avatar), .account-options small { color: rgb(var(--muted)); }
-.drawer-content button, .account-options button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 9px 4px; }
-.drawer-content button:hover { background: var(--hover); }
+.drawer-content > span:not(.avatar), .account-options small { color: rgb(var(--muted)); }
+.drawer-content > button:not(.rail-post), .account-options button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 9px 4px; }
+.drawer-content > button:not(.rail-post):hover { background: var(--hover); }
 .toast { position: fixed; z-index: 35; bottom: 22px; left: 50%; transform: translateX(-50%); background: rgb(var(--ink)); color: rgb(var(--canvas)); border-radius: 999px; padding: 11px 19px; font-weight: 750; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes dialog-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.98); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 @keyframes drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @media (min-width: 1000px) and (max-width: 1279px) {
-  .shell { grid-template-columns: 88px minmax(0, 600px) minmax(0, 350px); max-width: 1038px; }
+  .shell { grid-template-columns: 205px minmax(0, 600px) minmax(0, 350px); max-width: 1155px; }
+  .right-rail { padding-right: 12px; }
 }
 @media (min-width: 700px) and (max-width: 999px) {
-  .shell { grid-template-columns: 88px minmax(0, 600px); max-width: 688px; }
-}
-@media (min-width: 700px) and (max-width: 1279px) {
-  .left-rail { align-items: center; padding-inline: 10px; }
-  .nav-item { width: 47px; justify-content: center; margin-inline: auto; }
-  .nav-label, .left-rail .brand span, .account-text, .account-more { display: none; }
-  .button.rail-post { width: 48px; padding: 0; }
-  .account { width: 56px; }
-  .right-rail { padding-right: 12px; }
+  .shell { grid-template-columns: 205px minmax(0, 600px); max-width: 805px; }
 }
 @media (max-width: 999px) { .right-rail { display: none; } }
 @media (max-width: 699px) {
@@ -228,8 +221,8 @@ h1, h2, p { margin: 0; }
 [data-effect="evergreen"] .avatar { box-shadow: 0 0 0 2px #dde8d6, 0 0 0 5px #395542; }
 [data-effect="newsprint"] .avatar { box-shadow: 0 0 0 2px #fff, 0 0 0 5px #28292b; }
 [data-effect="copper"] .avatar { box-shadow: 0 0 0 2px #d6a17e, 0 0 0 5px #84533a; }
-.popover a, .drawer-about { display: flex; gap: 12px; align-items: center; padding: 9px 11px; border-radius: 7px; }
-.popover a:hover, .drawer-about:hover { background: var(--hover); }
+.popover a { display: flex; gap: 12px; align-items: center; padding: 9px 11px; border-radius: 7px; }
+.popover a:hover:hover { background: var(--hover); }
 .settings-route-link { margin: 20px; }
 .auth-form, .step-fields:not([hidden]) { display: grid; gap: 13px; }
 .auth-form label { display: grid; gap: 5px; font-weight: 650; }
@@ -302,7 +295,6 @@ h1, h2, p { margin: 0; }
 .welcome-actions .button-outline, .auth-modal-body .button-outline { border-color: rgb(var(--muted) / .35); }
 .welcome-actions p { color: rgb(var(--muted)); font-size: 12px; line-height: 17px; }
 .welcome-actions h3 { margin-top: 10px; font-weight: 700; }
-.welcome-actions .demo-link { justify-self: start; margin-top: 6px; }
 .welcome-actions a, .auth-standalone a, .cookie-notice a, .auth-switch button, .auth-identifier button {
   color: rgb(var(--accent));
   text-decoration: underline;
@@ -363,3 +355,9 @@ h1, h2, p { margin: 0; }
   .legal-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .legal-content { padding: 16px 0 0; border-left: 0; border-top: 1px solid rgb(var(--line)); }
 }
+
+.drawer-content { width: 100%; }
+.drawer-content .main-nav { margin-top: 0; }
+.drawer-content .more-menu .popover { position: static; margin-block: 4px; }
+
+.post-context { color: rgb(var(--muted)); font-size: 13px; margin-bottom: 5px; }

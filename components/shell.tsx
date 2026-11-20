@@ -11,7 +11,8 @@ import {
 import { useEffect, useRef, useState, type ComponentProps, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/dialog";
-import { people, posts, trends, type Person, type SamplePost } from "@/lib/mock";
+import type { Feed, FeedPost, Person } from "@/lib/feed";
+import { publishPost, setActivity } from "@/app/feed-actions";
 
 const navigation = [
   { name: "Home", icon: House }, { name: "Explore", icon: Compass },
@@ -25,7 +26,6 @@ const extras = [
 ] as const;
 type Setting = "Display" | "Account and sign-in" | "Edit profile" | "Push notifications";
 type Panel = "compose" | "drawer" | "account" | null;
-const suggestions: Person[] = [people.amina, people.leo, people.sofia];
 const themes = { light: "Default", dim: "Dim", dark: "Lights out" } as const;
 const accents = { blue: "Blue", yellow: "Yellow", pink: "Pink", purple: "Purple", orange: "Orange", green: "Green" } as const;
 
@@ -47,15 +47,32 @@ function Brand() {
   return <><Image src="/logo.svg" alt="" width={37} height={37} priority /><span>Loopr</span></>;
 }
 
-function PostCard({ post, onReply }: { post: SamplePost; onReply: () => void }) {
-  const [liked, setLiked] = useState(false);
-  const [reposted, setReposted] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
+function PostCard({ post, onReply, report }: { post: FeedPost; onReply: () => void; report: (message: string) => void }) {
+  const [pending, setPending] = useState(false);
+  const { liked, reposted, bookmarked } = post;
+
+  async function react(kind: "like" | "repost" | "bookmark", active: boolean) {
+    setPending(true);
+    try {
+      const result = await setActivity(kind, post.id, active);
+      if (result.error) report(result.error);
+    } catch {
+      report("Could not save that change.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   const [menu, setMenu] = useState(false);
   const [copied, setCopied] = useState(false);
 
   async function copyLink() {
-    await navigator.clipboard.writeText(new URL(`#post-${post.id}`, window.location.href).href);
+    try {
+      await navigator.clipboard.writeText(new URL(`#post-${post.id}`, window.location.href).href);
+    } catch {
+      report("Could not copy the link.");
+      return;
+    }
     setCopied(true);
     setMenu(false);
   }
@@ -72,15 +89,15 @@ function PostCard({ post, onReply }: { post: SamplePost; onReply: () => void }) 
             {menu && <div className="popover align-right"><button onClick={() => void copyLink()}><Link size={16} /> Copy link</button></div>}
           </div>
         </div>
+        {post.replyHandle && <p className="post-context">Replying to @{post.replyHandle}</p>}
         <p className="post-body">{post.text}</p>
-        {post.image && <div className="post-media"><Image src={post.image} alt={post.alt ?? ""} fill sizes="(max-width: 699px) 90vw, 510px" priority /></div>}
         <div className="post-actions">
           <button aria-label={`Reply, ${post.replies} replies`} onClick={onReply}><MessageCircle size={18} />{post.replies || ""}</button>
-          <button className="repost-action" aria-label={`Repost, ${post.reposts + Number(reposted)} reposts`} aria-pressed={reposted} onClick={() => setReposted(!reposted)}><ArrowDownUp size={18} />{post.reposts + Number(reposted) || ""}</button>
-          <button className="like-action" aria-label={`Like, ${post.likes + Number(liked)} likes`} aria-pressed={liked} onClick={() => setLiked(!liked)}><Heart size={18} fill={liked ? "currentColor" : "none"} />{post.likes + Number(liked) || ""}</button>
+          <button className="repost-action" aria-label={`Repost, ${post.reposts} reposts`} aria-pressed={reposted} disabled={pending} onClick={() => void react("repost", !reposted)}><ArrowDownUp size={18} />{post.reposts || ""}</button>
+          <button className="like-action" aria-label={`Like, ${post.likes} likes`} aria-pressed={liked} disabled={pending} onClick={() => void react("like", !liked)}><Heart size={18} fill={liked ? "currentColor" : "none"} />{post.likes || ""}</button>
           <span className="view-count"><ChartNoAxesColumn size={18} />{post.views}</span>
           <div className="extra-actions">
-            <button aria-label="Bookmark" aria-pressed={bookmarked} onClick={() => setBookmarked(!bookmarked)}><Bookmark size={18} fill={bookmarked ? "currentColor" : "none"} /></button>
+            <button aria-label="Bookmark" aria-pressed={bookmarked} disabled={pending} onClick={() => void react("bookmark", !bookmarked)}><Bookmark size={18} fill={bookmarked ? "currentColor" : "none"} /></button>
             <button aria-label="Copy link" onClick={() => void copyLink()}><Upload size={18} /></button>
           </div>
         </div>
@@ -98,7 +115,6 @@ const shopItems = [
   { name: "Newsprint", description: "A black-and-white double border.", price: 75, style: "newsprint" },
   { name: "Copper", description: "A brushed copper accent ring.", price: 175, style: "copper" },
 ] as const;
-type ShopItem = (typeof shopItems)[number];
 
 function SettingsSummary({ rows, message = "Editing will be available once accounts are connected." }: { rows: [string, string][]; message?: string }) {
   return <div className="settings-summary">
@@ -107,23 +123,30 @@ function SettingsSummary({ rows, message = "Editing will be available once accou
   </div>;
 }
 
-function Composer({ onSubmit, placeholder = "What’s happening?", viewer }: { onSubmit: (body: string) => void; placeholder?: string; viewer: Person }) {
+function Composer({ onSubmit, placeholder = "What’s happening?", viewer }: { onSubmit: (body: string) => Promise<boolean>; placeholder?: string; viewer: Person }) {
   const [draft, setDraft] = useState("");
   const field = useRef<HTMLTextAreaElement>(null);
-  const valid = draft.trim().length > 0 && draft.length <= 280;
+  const [pending, setPending] = useState(false);
+  const limit = viewer.verified ? 1000 : 280;
+  const length = Array.from(draft).length;
+  const valid = draft.trim().length > 0 && length <= limit;
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!valid) return;
-    onSubmit(draft.trim());
-    setDraft("");
+    if (!valid || pending) return;
+    setPending(true);
+    try {
+      if (await onSubmit(draft.trim())) setDraft("");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
     <form className="composer" onSubmit={submit}>
       <Avatar person={viewer} size={42} />
       <div className="composer-main">
-        <textarea ref={field} rows={1} aria-label={placeholder} placeholder={placeholder} value={draft}
+        <textarea ref={field} rows={1} aria-label={placeholder} placeholder={placeholder} value={draft} disabled={pending}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit(); }} />
         <div className="composer-actions">
@@ -131,8 +154,8 @@ function Composer({ onSubmit, placeholder = "What’s happening?", viewer }: { o
             <IconButton aria-label="Media available in Phase 3" disabled><ImagePlus size={19} /></IconButton>
             <IconButton aria-label="Insert a smile" onClick={() => { setDraft((value) => value + " 🙂"); field.current?.focus(); }}><Smile size={19} /></IconButton>
           </div>
-          <span className={draft.length > 280 ? "over-limit" : "character-count"}>{draft.length}/280</span>
-          <Button type="submit" disabled={!valid}>Post</Button>
+          <span className={length > limit ? "over-limit" : "character-count"}>{length}/{limit}</span>
+          <Button type="submit" disabled={!valid || pending}>Post</Button>
         </div>
       </div>
     </form>
@@ -141,12 +164,8 @@ function Composer({ onSubmit, placeholder = "What’s happening?", viewer }: { o
 
 type ProfileSummary = { bio: string; pronouns: string; location: string | null; website: string | null };
 
-export function Shell({ viewer = people.jordan, authenticated = false, profileSummary }: {
-  viewer?: Person; authenticated?: boolean; profileSummary?: ProfileSummary;
-} = {}) {
-  const [xp, setXp] = useState(250);
-  const [ownedEffects, setOwnedEffects] = useState<ShopItem["style"][]>([]);
-  const [profileEffect, setProfileEffect] = useState<ShopItem["style"]>();
+export function Shell({ viewer, feed, profileSummary }: { viewer: Person; feed: Feed; profileSummary: ProfileSummary }) {
+  const [followPending, setFollowPending] = useState<string>();
   const [section, setSection] = useState<Section>("Home");
   const [tab, setTab] = useState<"For you" | "Following">("For you");
   const [setting, setSetting] = useState<Setting | null>(null);
@@ -154,9 +173,7 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
   const [more, setMore] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [following, setFollowing] = useState<string[]>([]);
-  const [localPosts, setLocalPosts] = useState<SamplePost[]>([]);
-  const [replyTo, setReplyTo] = useState<SamplePost | null>(null);
+  const [replyTo, setReplyTo] = useState<FeedPost | null>(null);
   const [notice, setNotice] = useState("");
   const [theme, setTheme] = useState<keyof typeof themes>();
   const [accent, setAccent] = useState<keyof typeof accents>();
@@ -219,51 +236,47 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
     try { localStorage.setItem(`loopr-${key}`, value); } catch {}
   }
 
-  function addPost(body: string) {
-    const text = replyTo ? `Replying to @${replyTo.person.handle}\n${body}` : body;
-    setLocalPosts((current) => [{ id: Date.now(), person: viewer, time: "now", text, likes: 0, replies: 0, reposts: 0, views: "0" }, ...current]);
-    if (panel) closePanel();
-    setNotice("Your post was sent.");
-    navigate("Home");
+  async function addPost(body: string) {
+    try {
+      const result = await publishPost(body, replyTo?.id ?? null);
+      if (result.error) { setNotice(result.error); return false; }
+      navigate("Home");
+      setNotice(replyTo ? "Your reply was sent." : "Your post was sent.");
+      return true;
+    } catch {
+      setNotice("Could not publish your post.");
+      return false;
+    }
   }
 
-  const allPosts = [...localPosts, ...posts];
-  const visiblePosts = tab === "For you" ? allPosts : allPosts.filter((post) => post.person.handle === viewer.handle || following.includes(post.person.handle));
-  const matchingPeople = query.trim() ? suggestions.filter((person) => `${person.name} ${person.handle}`.toLowerCase().includes(query.trim().toLowerCase())) : [];
-  const matchingTrends = query.trim() ? trends.filter((trend) => trend.name.toLowerCase().includes(query.trim().toLowerCase())) : [];
+  async function follow(person: Feed["people"][number]) {
+    setFollowPending(person.id);
+    try {
+      const result = await setActivity("follow", person.id, !person.follows);
+      if (result.error) setNotice(result.error);
+    } catch {
+      setNotice("Could not save that change.");
+    } finally {
+      setFollowPending(undefined);
+    }
+  }
+
+  const visiblePosts = tab === "For you" ? feed.latest : feed.following;
+  const matchingPeople = query.trim() ? feed.people.filter((person) => `${person.name} ${person.handle}`.toLowerCase().includes(query.trim().toLowerCase())) : [];
 
   return (
     <div className="shell">
       <aside className="left-rail" aria-label="Sidebar">
         <button className="brand" aria-label="Loopr home" onClick={() => navigate("Home")}><Brand /></button>
-        <nav className="main-nav" aria-label="Primary">
-          {[...navigation, ...extras].map(({ name, icon: Icon }) => (
-            <button className={`nav-item ${section === name ? "selected" : ""}`} key={name} aria-label={name} aria-current={section === name ? "page" : undefined} onClick={() => navigate(name)}>
-              <span className="nav-icon"><Icon size={24} strokeWidth={section === name ? 2.4 : 1.8} />{name === "Notifications" && <span className="notification-dot">2</span>}</span>
-              <span className="nav-label">{name}</span>
-            </button>
-          ))}
-          <div className="more-menu" ref={moreMenu}>
-            <button type="button" className="nav-item" aria-label="More" aria-expanded={more} onClick={() => setMore(!more)}><span className="nav-icon"><Ellipsis size={24} /></span><span className="nav-label">More</span></button>
-            {more && <div className="popover">
-              <button onClick={() => navigate("Lists")}><List size={18} /> Lists</button>
-              <button onClick={() => navigate("Bookmarks")}><Bookmark size={18} /> Bookmarks</button>
-              <button onClick={() => navigate("Settings")}><Settings size={18} /> Settings and privacy</button>
-              <button onClick={() => navigate("Help Center")}><CircleHelp size={18} /> Help Center</button>
-              <LinkTo href="/about">About Loopr</LinkTo>
-              <button onClick={() => openPanel("account")}><UserRound size={18} /> Log out</button>
-            </div>}
-          </div>
-        </nav>
-        <Button className="rail-post" aria-label="New post" onClick={() => openPanel("compose")}><Plus size={22} /><span className="nav-label">Post</span></Button>
-        <button className="account" data-effect={profileEffect} aria-label="Account options" onClick={() => openPanel("account")}><Avatar person={viewer} />
+        {renderSidebar(false)}
+        <button className="account" aria-label="Account options" onClick={() => openPanel("account")}><Avatar person={viewer} />
           <span className="account-text"><strong>{viewer.name}</strong><small>@{viewer.handle}</small></span><Ellipsis className="account-more" size={20} />
         </button>
       </aside>
 
       <main className="main">
         <div className="mobile-top">
-          <button className="icon-button" data-effect={profileEffect} aria-label="Open profile menu" onClick={() => openPanel("drawer")}><Avatar person={viewer} size={32} /></button>
+          <button className="icon-button" aria-label="Open profile menu" onClick={() => openPanel("drawer")}><Avatar person={viewer} size={32} /></button>
           <button className="brand mobile-brand" aria-label="Loopr home" onClick={() => navigate("Home")}><Brand /></button>
           <IconButton aria-label="Settings" onClick={() => navigate("Settings")}><Settings size={21} /></IconButton>
         </div>
@@ -277,8 +290,8 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
         {section === "Home" ? <>
           <div className="inline-composer"><Composer viewer={viewer} onSubmit={addPost} /></div>
           <div className="feed-marker"><span>{tab === "For you" ? "Latest in your feed" : "Posts from accounts you follow"}</span></div>
-          {visiblePosts.length ? visiblePosts.map((post) => <PostCard key={post.id} post={post} onReply={() => { setReplyTo(post); openPanel("compose"); }} />)
-            : <div className="empty"><UserRound size={26} /><h2>Your following feed is empty</h2><p>Follow people to see their posts here.</p><Button onClick={() => navigate("Explore")}>Explore</Button></div>}
+          {visiblePosts.length ? visiblePosts.map((post) => <PostCard key={post.id} post={post} report={setNotice} onReply={() => { setReplyTo(post); openPanel("compose"); }} />)
+            : <div className="empty"><UserRound size={26} /><h2>{tab === "Following" ? "Your following feed is empty" : "No posts yet"}</h2><p>{tab === "Following" ? "Follow people to see their posts here." : "Start the conversation with a post."}</p><Button onClick={() => navigate("Explore")}>Explore</Button></div>}
         </> : section === "Settings" ? (
           setting === "Display" ? <div className="display-controls">
           <fieldset><legend>Background</legend><div className="theme-options">
@@ -288,18 +301,9 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
             {Object.entries(accents).map(([value, label]) => <button key={value} className={`accent-option color-${value}`} aria-label={label} title={label} aria-pressed={accent === value} onClick={() => { setAccent(value as keyof typeof accents); display("accent", value); }} />)}
           </div></fieldset>
         </div> :
-          setting === "Account and sign-in" ? (authenticated ? <SettingsLink href="/settings/account">Open account settings</SettingsLink> : <SettingsSummary rows={[
-            ["Google account", "Link or unlink Google after signing in."],
-            ["Change password", "Enter your current password and confirm the new password."],
-            ["Change email address", "Confirm with your current password."],
-            ["Change username", "Change your username once every 7 days."],
-          ]} />) :
-          setting === "Push notifications" ? (authenticated ? <SettingsLink href="/settings/notifications">Manage browser push</SettingsLink> : <SettingsSummary rows={[["Browser push", "Sign in to manage push notifications."]]} />) :
-          setting === "Edit profile" ? (authenticated ? <SettingsLink href="/settings/profile">Open profile editor</SettingsLink> : <SettingsSummary rows={[
-            ["Profile picture", "Upload a profile picture."], ["Display name", "Edit your name whenever you like."],
-            ["Pronouns", "Add the pronouns you use."], ["Bio", "Introduce yourself."],
-            ["Website", "Add a link to your profile."], ["Location", "Share where you’re based."],
-          ]} />) : <div className="settings-list">
+          setting === "Account and sign-in" ? <SettingsLink href="/settings/account">Open account settings</SettingsLink> :
+          setting === "Push notifications" ? <SettingsLink href="/settings/notifications">Manage browser push</SettingsLink> :
+          setting === "Edit profile" ? <SettingsLink href="/settings/profile">Open profile editor</SettingsLink> : <div className="settings-list">
             {([
               ["Account and sign-in", "Google, password, email and username", ShieldCheck],
               ["Edit profile", "Profile picture, name, pronouns and bio", UserRound],
@@ -310,7 +314,7 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
             ))}
           </div>
         )
-          : section === "Profile" && profileSummary ? <section className="member-profile">
+          : section === "Profile" ? <section className="member-profile">
             <div className="member-profile-header"><Avatar person={viewer} size={72} /><LinkTo className="button button-outline" href="/settings/profile">Edit profile</LinkTo></div>
             <h2>{viewer.name} {viewer.verified && <VerifiedBadge />}</h2>
             <p className="member-meta">@{viewer.handle}{profileSummary.pronouns && ` · ${profileSummary.pronouns}`}</p>
@@ -323,22 +327,13 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
           : section === "Shop" ? <div className="reward-page">
             <div className="reward-intro">
               <div><h2>XP Shop</h2><p>Spend XP on profile effects exclusive to the shop.</p></div>
-              <strong className="xp-balance" role="status">{xp} XP</strong>
             </div>
-            <p className="reward-note">Preview balance. Purchases reset on reload.</p>
-            <div className="reward-grid">{shopItems.map((item) => {
-              const owned = ownedEffects.includes(item.style);
-              const equipped = profileEffect === item.style;
-              return <article key={item.name} className="shop-card">
-                <div className="effect-preview" data-effect={item.style}><Avatar person={viewer} size={48} /></div>
-                <h3>{item.name}</h3><p>{item.description}</p>
-                <Button variant={owned ? "outline" : "primary"} disabled={!owned && xp < item.price} aria-label={owned ? (equipped ? `Unequip ${item.name}` : `Equip ${item.name}`) : `Buy ${item.name} for ${item.price} XP`} onClick={() => {
-                  if (owned) { setProfileEffect(equipped ? undefined : item.style); return; }
-                  setXp((balance) => balance - item.price);
-                  setOwnedEffects((effects) => [...effects, item.style]);
-                }}>{owned ? (equipped ? "Unequip" : "Equip") : `${item.price} XP`}</Button>
-              </article>;
-            })}</div>
+            <p className="reward-note">XP purchases are not available yet.</p>
+            <div className="reward-grid">{shopItems.map((item) => <article key={item.name} className="shop-card">
+              <div className="effect-preview" data-effect={item.style}><Avatar person={viewer} size={48} /></div>
+              <h3>{item.name}</h3><p>{item.description}</p>
+              <Button disabled>{item.price} XP</Button>
+            </article>)}</div>
           </div>
           : section === "Quests" ? <SettingsSummary message="Quest rewards will start once activities are connected to accounts." rows={[
             ["Daily · Like posts", "Like posts you enjoy to earn XP."],
@@ -352,7 +347,10 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
             ["Super emoji reactions", "Use additional reactions on posts."],
             ["Premium badge", "Show a yellow badge on your profile."],
           ]} />
-          : section === "Explore" ? <div className="explore-content">{renderSearchPanel()}{renderTrendPanel()}{renderFollowPanel()}</div>
+          : section === "Bookmarks" ? (feed.bookmarks.length ? feed.bookmarks.map((post) =>
+            <PostCard key={post.id} post={post} report={setNotice} onReply={() => { setReplyTo(post); openPanel("compose"); }} />)
+            : <div className="empty"><Bookmark size={26} /><h2>No bookmarks yet</h2><p>Save a post to find it here later.</p></div>)
+          : section === "Explore" ? <div className="explore-content">{renderSearchPanel()}{renderFollowPanel()}</div>
           : <div className="empty"><Compass size={28} /><h2>{section}</h2><p>This page is coming in a later phase.</p><Button variant="outline" onClick={() => navigate("Home")}>Back to Home</Button></div>}
       </main>
 
@@ -364,7 +362,6 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
           <p>Make your profile recognizable with a verified badge.</p>
           <Button onClick={() => navigate("Verified")}>Get verified <ArrowRight size={16} /></Button>
         </section>
-        {renderTrendPanel()}
         {renderFollowPanel()}
         <footer className="footer-links">
           {[["Terms", "/terms"], ["Privacy", "/privacy"], ["Refunds", "/refunds"], ["About", "/about"]].map(([name, href]) => <LinkTo key={name} href={href}>{name}</LinkTo>)}
@@ -382,16 +379,40 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
         {panel === "compose" && <Composer viewer={viewer} onSubmit={addPost} placeholder={replyTo ? "Post your reply" : undefined} />}
         {panel === "drawer" && <div className="drawer-content">
           <Avatar person={viewer} size={46} /><strong>{viewer.name}</strong><span>@{viewer.handle}</span>
-          <p><b>128</b> Following <b>304</b> Followers</p>
-          {[...navigation.filter(({ name }) => ["Profile", "Bookmarks", "Verified", "Settings"].includes(name)), ...extras].map(({ name, icon: Icon }) => <button key={name} onClick={() => navigate(name)}><Icon size={22} /> {name}</button>)}
-          <LinkTo className="drawer-about" href="/about"><CircleHelp size={22} /> About Loopr</LinkTo>
-          <button onClick={() => openPanel("account")}><UserRound size={22} /> {authenticated ? "Log out" : "Account options"}</button>
+          <p><b>{feed.counts.following}</b> Following <b>{feed.counts.followers}</b> Followers</p>
+          {renderSidebar(true)}
         </div>}
-        {panel === "account" && <div className="account-options">{authenticated ? <SignOut handle={viewer.handle} /> : <LinkTo className="button button-outline" href="/welcome">Preview sign-in</LinkTo>}</div>}
+        {panel === "account" && <div className="account-options"><SignOut handle={viewer.handle} /></div>}
       </Modal>
       {notice && <div role="status" className="toast">{notice}</div>}
     </div>
   );
+
+  function renderSidebar(inDrawer: boolean) {
+    const expanded = more && (panel === "drawer") === inDrawer;
+    return <>
+      <nav className="main-nav" aria-label={inDrawer ? "Sidebar navigation" : "Primary"}>
+          {[...navigation, ...extras].map(({ name, icon: Icon }) => (
+            <button className={`nav-item ${section === name ? "selected" : ""}`} key={name} aria-label={name} aria-current={section === name ? "page" : undefined} onClick={() => navigate(name)}>
+              <span className="nav-icon"><Icon size={24} strokeWidth={section === name ? 2.4 : 1.8} />{name === "Notifications" && feed.counts.unread > 0 && <span className="notification-dot">{feed.counts.unread > 99 ? "99+" : feed.counts.unread}</span>}</span>
+              <span className="nav-label">{name}</span>
+            </button>
+          ))}
+          <div className="more-menu" ref={(panel === "drawer") === inDrawer ? moreMenu : undefined}>
+            <button type="button" className="nav-item" aria-label="More" aria-expanded={expanded} onClick={() => setMore(!more)}><span className="nav-icon"><Ellipsis size={24} /></span><span className="nav-label">More</span></button>
+            {expanded && <div className="popover">
+              <button onClick={() => navigate("Lists")}><List size={18} /> Lists</button>
+              <button onClick={() => navigate("Bookmarks")}><Bookmark size={18} /> Bookmarks</button>
+              <button onClick={() => navigate("Settings")}><Settings size={18} /> Settings and privacy</button>
+              <button onClick={() => navigate("Help Center")}><CircleHelp size={18} /> Help Center</button>
+              <LinkTo href="/about">About Loopr</LinkTo>
+              <button onClick={() => openPanel("account")}><UserRound size={18} /> Log out</button>
+            </div>}
+          </div>
+        </nav>
+        <Button className="rail-post" aria-label="New post" onClick={() => openPanel("compose")}><Plus size={22} /><span className="nav-label">Post</span></Button>
+    </>;
+  }
 
   function renderSearchPanel() {
     return <div className="search-wrap" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false); }}>
@@ -401,30 +422,20 @@ export function Shell({ viewer = people.jordan, authenticated = false, profileSu
       {searchOpen && <div className="popover search-results">
         {query.trim() ? <>
           {matchingPeople.map((person) => <button key={person.handle} onClick={() => { setQuery(person.name); navigate("Explore"); setSearchOpen(false); }}><Avatar person={person} size={28} /> {person.name}</button>)}
-          {matchingTrends.map((trend) => <button key={trend.name} onClick={() => { setQuery(trend.name); navigate("Explore"); setSearchOpen(false); }}><Search size={16} /> {trend.name}</button>)}
-          {!matchingPeople.length && !matchingTrends.length && <p>No matches in the preview.</p>}
-        </> : <p>Search for people or topics.</p>}
+          {!matchingPeople.length && <p>No matching people.</p>}
+        </> : <p>Search for people.</p>}
       </div>}
     </div>;
-  }
-
-  function renderTrendPanel() {
-    return <section className="side-card">
-      <div className="side-head"><h2>What’s happening</h2></div>
-      {trends.map((trend) => <button className="trend-row" key={trend.name} onClick={() => { setQuery(trend.name); navigate("Explore"); }}>
-        <span className="trend-category">Trending in {trend.category}</span><strong>{trend.name}</strong><small>{trend.count} posts</small><Ellipsis size={17} />
-      </button>)}
-      {section !== "Explore" && <button className="show-more" onClick={() => navigate("Explore")}>Show more <ArrowRight size={15} /></button>}
-    </section>;
   }
 
   function renderFollowPanel() {
     return <section className="side-card">
       <div className="side-head"><h2>Who to follow</h2></div>
-      {suggestions.map((person) => {
-        const active = following.includes(person.handle);
+      {!feed.people.length && <p className="side-head">No suggestions yet.</p>}
+      {feed.people.map((person) => {
+        const active = person.follows;
         return <div className="follow-row" key={person.handle}><Avatar person={person} /><div className="follow-person"><strong>{person.name} {person.verified && <VerifiedBadge />}</strong><small>@{person.handle}</small></div>
-          <Button className={active ? "following-button" : "follow-button"} variant={active ? "outline" : "quiet"} aria-pressed={active} onClick={() => setFollowing((current) => active ? current.filter((handle) => handle !== person.handle) : [...current, person.handle])}>{active ? "Following" : "Follow"}</Button></div>;
+          <Button className={active ? "following-button" : "follow-button"} variant={active ? "outline" : "quiet"} aria-pressed={active} disabled={Boolean(followPending)} onClick={() => void follow(person)}>{active ? "Following" : "Follow"}</Button></div>;
       })}
       {section !== "Explore" && <button className="show-more" onClick={() => navigate("Explore")}>Show more <ArrowRight size={15} /></button>}
     </section>;

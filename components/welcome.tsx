@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/dialog";
 import { DateOfBirth } from "./date-of-birth";
 
-export function Welcome({ google, mail, demo }: { google: boolean; mail: boolean; demo: boolean }) {
+export function Welcome({ google, mail, configured }: { google: boolean; mail: boolean; configured: boolean }) {
   const [screen, setScreen] = useState<"login" | "register" | "reset" | null>(null);
   const [step, setStep] = useState(1);
   const [identifier, setIdentifier] = useState("");
@@ -53,7 +53,7 @@ export function Welcome({ google, mail, demo }: { google: boolean; mail: boolean
       setStep(2);
       return;
     }
-    if (demo) { setError("This preview needs a database to create or sign in to an account."); return; }
+    if (!configured) { setError("Accounts are unavailable while Loopr is being set up."); return; }
     setBusy(true);
     try {
       if (screen === "login") {
@@ -91,11 +91,11 @@ export function Welcome({ google, mail, demo }: { google: boolean; mail: boolean
         <div className="welcome-actions">
           <Button variant="outline" disabled={!google} onClick={() => void googleSignIn()}><span className="google-mark" aria-hidden>G</span> Sign up with Google</Button>
           <span className="auth-divider">or</span>
-          <Button onClick={() => open("register")}>Create account</Button>
+          <Button disabled={!configured || !mail} onClick={() => open("register")}>Create account</Button>
           <p>By creating an account, you agree to the <Link href="/terms">Terms of Service</Link> and acknowledge the <Link href="/privacy">Privacy Policy</Link>.</p>
           <h3>Already have an account?</h3>
-          <Button variant="outline" onClick={() => open("login")}>Sign in</Button>
-          {demo && <Link className="demo-link" href="/">Open the demo feed</Link>}
+          <Button variant="outline" disabled={!configured} onClick={() => open("login")}>Sign in</Button>
+          {!configured && <p role="status">Accounts will open once setup is complete.</p>}
         </div>
       </div>
     </main>
@@ -119,7 +119,7 @@ export function Welcome({ google, mail, demo }: { google: boolean; mail: boolean
             {error && <p className="form-error" role="alert">{error}</p>}
             <Button type="submit" disabled={busy}>{busy ? "Please wait…" : screen === "reset" ? "Send reset link" : step === 1 ? "Next" : screen === "register" ? "Create account" : "Log in"}</Button>
           </form>
-          {screen === "login" && <Button variant="outline" disabled={!mail && !demo} onClick={() => open("reset")}>Forgot password?</Button>}
+          {screen === "login" && <Button variant="outline" disabled={!mail} onClick={() => open("reset")}>Forgot password?</Button>}
           {screen === "login" && step === 1 && <p className="auth-switch">New to Loopr? <button type="button" onClick={() => open("register")}>Create an account</button></p>}
           {screen === "reset" && <p className="auth-switch"><button type="button" onClick={() => open("login")}>Back to sign in</button></p>}
         </>}

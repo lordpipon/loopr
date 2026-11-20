@@ -50,7 +50,7 @@ export default async function PolicyPage({ params }: Props) {
     {key === "terms" && <>
       <h2>Using Loopr</h2><p>You must be at least 13 to create an account. Keep your login details private and use an email address you control.</p>
       <h2>What you share</h2><p>Share only content you have permission to post. Do not use Loopr to harass others, impersonate someone, distribute unlawful content, or abuse the service.</p>
-      <h2>Preview features</h2><p>Demo activity and XP may reset. Features and availability can change during development.</p>
+      <h2>Feature availability</h2><p>Features and availability can change during development.</p>
     </>}
     {key === "privacy" && <>
       <h2>Account data</h2><p>Loopr stores account details, your public profile, your private date of birth, and session data. Passwords are stored as hashes. Google sends your account identifier and basic profile information if you choose Google sign-in.</p>
